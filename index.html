@@ -1,0 +1,64 @@
+<!doctype html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>لجنة أخلاقيات البحث العلمي — كلية العلوم جامعة المنصورة</title>
+<meta name="description" content="تقديم بروتوكول وأبليكيشن لجنة أخلاقيات البحث العلمي — كلية العلوم، جامعة المنصورة.">
+<link rel="icon" href="logo-faculty.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Readex+Pro:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="bg-art" aria-hidden="true">
+  <span class="orb o1"></span><span class="orb o2"></span><span class="orb o3"></span><span class="orb o4"></span>
+</div>
+
+<div class="shell">
+
+  <header class="site-head">
+    <div class="head-row">
+      <img class="logo" id="logoUni" src="logo-university.png" alt="شعار جامعة المنصورة">
+      <div class="head-mid">
+        <div class="kicker">كلية العلوم — جامعة المنصورة</div>
+        <h1 class="site-title">لجنة <em>أخلاقيات</em> البحث العلمي</h1>
+        <div class="title-rule"></div>
+      </div>
+      <img class="logo" id="logoFac" src="logo-faculty.png" alt="شعار كلية العلوم">
+    </div>
+    <div class="head-note">
+      <span class="ico">ⓘ</span>
+      <div><b>ملحوظة:</b> علماً بأنه يجب تقديم الملفات للجنة قبل انعقاد مجلس القسم.</div>
+    </div>
+  </header>
+
+  <main id="app"></main>
+
+  <footer class="site-foot">
+    <div>لجنة أخلاقيات البحث العلمي — كلية العلوم، جامعة المنصورة</div>
+    <button type="button" id="adminLink" class="hidden"></button>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app-core.js"></script>
+<script src="student.js"></script>
+<script>
+StudentApp.start();
+
+/* في الوضع التجريبي فقط يظهر مدخل اللجنة لتسهيل التجربة.
+   بمجرد ربط الموقع بالخادم (API_URL) يختفي تلقائياً،
+   ويصبح الدخول من اللينك المنفصل admin.html فقط. */
+(function () {
+  var b = document.getElementById("adminLink");
+  if (typeof LIVE !== "undefined" && !LIVE) {
+    b.textContent = "دخول اللجنة (وضع تجريبي)";
+    b.classList.remove("hidden");
+    b.addEventListener("click", function () { location.href = "admin.html"; });
+  }
+})();
+</script>
+</body>
+</html>
