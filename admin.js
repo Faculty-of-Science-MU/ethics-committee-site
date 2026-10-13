@@ -12,6 +12,8 @@ function render(){
   const a = APP(); a.innerHTML = "";
   if(!ADMIN_OK)                a.appendChild(viewLogin());
   else if(AV==="one" && CUR)   a.appendChild(viewOne());
+  else if(AV==="stats")        a.appendChild(viewStats());
+  else if(AV==="report")       a.appendChild(viewReport());
   else                         a.appendChild(viewAdmin());
 }
 /* ============================================================
@@ -77,9 +79,18 @@ function viewAdmin(){
     (MEMBER?'<span class="chip ok" style="background:rgba(255,255,255,.14);color:#CFEADD">'+esc(MEMBER)+'</span>':'')+
     '<span style="font-size:12px;opacity:.75">'+(LIVE?"متصل بقاعدة البيانات":"وضع تجريبي — البيانات على هذا الجهاز فقط")+'</span>'+
     '<span class="spacer"></span>';
-  const ex=el("button",null,"⤓ تصدير Excel");
+  const stBtn=el("button",null,"📊 إحصائيات الجودة");
+  stBtn.addEventListener("click",()=>go("stats"));
+  bar.appendChild(stBtn);
+  const ex=el("button",null,"⤓ Excel");
   ex.addEventListener("click",()=>exportCsv());
   bar.appendChild(ex);
+  const exPdf=el("button",null,"⤓ PDF");
+  exPdf.addEventListener("click",()=>exportPdf());
+  bar.appendChild(exPdf);
+  const exWord=el("button",null,"⤓ Word");
+  exWord.addEventListener("click",()=>exportWord());
+  bar.appendChild(exWord);
   const rf=el("button",null,"⟳ تحديث"); rf.addEventListener("click",async()=>{ await refreshSubs(); render(); toast("تم التحديث"); });
   const out=el("button",null,"خروج"); out.addEventListener("click",()=>{ ADMIN_OK=false; ADMIN_CODE=""; SUBS=[]; CUR=null; go("login"); });
   bar.appendChild(rf); bar.appendChild(out);
@@ -267,6 +278,294 @@ function exportCsv(){
   document.body.appendChild(a); a.click();
   setTimeout(()=>{ a.remove(); URL.revokeObjectURL(url); }, 400);
   toast("تم تصدير " + SUBS.length + " طلب");
+}
+
+/* ---------- تصدير تقرير PDF (طباعة المتصفح) ---------- */
+function exportPdf(){
+  if(!SUBS.length) return toast("لا توجد طلبات للتصدير", true);
+  go("report");
+}
+
+function viewReport(){
+  const w=el("div");
+  const bar=el("div","admin-bar no-print");
+  bar.innerHTML='<b>تقرير الطلبات — نسخة للطباعة / PDF</b><span class="spacer"></span>';
+  const back=el("button",null,"→ رجوع"); back.type="button"; back.addEventListener("click",()=>go("admin"));
+  const prt=el("button",null,"🖨️ طباعة / حفظ PDF"); prt.type="button"; prt.addEventListener("click",()=>window.print());
+  bar.appendChild(prt); bar.appendChild(back);
+  w.appendChild(bar);
+
+  const doc=el("div","doc");
+  const srcOf=id=>{ const n=$("#"+id); return (n&&n.tagName==="IMG")?n.src:""; };
+  const slot=(id,txt)=>{ const s=srcOf(id); return s?'<img class="logo" src="'+s+'" alt="">':'<div class="logo-ph">'+txt+'</div>'; };
+  const head=el("div","doc-head");
+  head.innerHTML='<div class="dh-row">'+slot("logoUni","شعار<br>الجامعة")+
+    '<div><h2>تقرير إجمالي بطلبات لجنة أخلاقيات البحث العلمي</h2>'+
+    '<div class="sub">كلية العلوم — جامعة المنصورة · بتاريخ '+esc(fmtDateTime(new Date().toISOString()))+
+    ' · إجمالي '+SUBS.length+' طلب</div></div>'+slot("logoFac","شعار<br>الكلية")+'</div>';
+  doc.appendChild(head);
+
+  const AR = { pending:"قيد المراجعة", approved:"مستوفاة", revision:"غير مستوفاة" };
+  const sc=el("div","scroll-x"); sc.style.cssText="border:0;margin-top:6px";
+  const t=el("table","report-table");
+  t.innerHTML='<thead><tr><th>#</th><th>الكود</th><th>الاسم</th><th>القسم</th><th>الدرجة</th>'+
+    '<th>تاريخ التقديم</th><th>الحالة</th></tr></thead>';
+  const tb=el("tbody");
+  SUBS.forEach((s,i)=>{
+    const d=DEPTS[s.dept];
+    const tr=el("tr");
+    tr.innerHTML='<td>'+(i+1)+'</td><td class="mono">'+esc(s.code)+'</td><td>'+esc(s.student.name)+'</td>'+
+      '<td>'+esc(d?d.ar:"—")+'</td><td>'+esc(s.student.degree||"—")+'</td>'+
+      '<td class="mono">'+esc(fmtDateTime(s.createdAt))+'</td><td>'+esc(AR[s.status||"pending"])+'</td>';
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb); sc.appendChild(t); doc.appendChild(sc);
+  w.appendChild(doc);
+
+  setTimeout(()=>window.print(), 300);
+  return w;
+}
+
+/* ---------- تصدير تقرير Word ---------- */
+function exportWord(){
+  if(!SUBS.length) return toast("لا توجد طلبات للتصدير", true);
+  const AR = { pending:"قيد المراجعة", approved:"مستوفاة", revision:"غير مستوفاة" };
+  const rows = SUBS.map((s,i)=>{
+    const d=DEPTS[s.dept];
+    return "<tr>"+
+      "<td>"+(i+1)+"</td><td>"+esc(s.code)+"</td><td>"+esc(s.student.name)+"</td>"+
+      "<td>"+esc(s.student.email)+"</td><td>"+esc(d?d.ar:"—")+"</td>"+
+      "<td>"+esc(s.student.degree||"—")+"</td><td>"+esc(fmtDateTime(s.createdAt))+"</td>"+
+      "<td>"+esc(AR[s.status||"pending"])+"</td>"+
+    "</tr>";
+  }).join("");
+  const html =
+    '<html xmlns:o="urn:schemas-microsoft-com:office:office" '+
+    'xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">'+
+    '<head><meta charset="utf-8"><title>تقرير طلبات اللجنة</title>'+
+    '<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View>'+
+    '<w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->'+
+    "<style>"+
+      "body{font-family:Arial,Tahoma,sans-serif;direction:rtl}"+
+      "table{border-collapse:collapse;width:100%;font-size:11pt}"+
+      "th,td{border:1px solid #999;padding:5px 8px;text-align:right}"+
+      "th{background:#E6F4EC;color:#17694A}"+
+      "h1{font-size:16pt;color:#0F2B21;margin-bottom:2px}"+
+      ".sub{color:#555;font-size:10pt;margin-bottom:14px}"+
+    "</style></head><body>"+
+    "<h1>تقرير إجمالي بطلبات لجنة أخلاقيات البحث العلمي</h1>"+
+    '<div class="sub">كلية العلوم — جامعة المنصورة · بتاريخ '+fmtDateTime(new Date().toISOString())+
+    " · إجمالي "+SUBS.length+" طلب</div>"+
+    "<table><thead><tr><th>#</th><th>الكود</th><th>الاسم</th><th>البريد الإلكتروني</th>"+
+    "<th>القسم</th><th>الدرجة</th><th>تاريخ التقديم</th><th>الحالة</th></tr></thead>"+
+    "<tbody>"+rows+"</tbody></table></body></html>";
+  const blob = new Blob(["﻿"+html], { type:"application/msword" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "تقرير-طلبات-لجنة-الأخلاقيات-" + new Date().toISOString().slice(0,10) + ".doc";
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ a.remove(); URL.revokeObjectURL(url); }, 400);
+  toast("تم تصدير " + SUBS.length + " طلب بصيغة Word");
+}
+
+/* ============================================================
+   إحصائيات الجودة
+   ============================================================ */
+const DEPT_SHORT = { physics:"الفيزياء", math:"الرياضيات", geology:"الجيولوجيا",
+  zoology:"علم الحيوان", chemistry:"الكيمياء", botany:"النبات" };
+
+function computeStats(subs){
+  const total = subs.length;
+  const byStatus = { pending:0, approved:0, revision:0 };
+  const byDept = {}; Object.keys(DEPTS).forEach(k=>byDept[k]=0);
+  const byDay = {};
+  let revisedCount = 0, turnArounds = [];
+  subs.forEach(s=>{
+    const st = s.status || "pending";
+    byStatus[st] = (byStatus[st]||0) + 1;
+    if(byDept[s.dept] != null) byDept[s.dept]++;
+    const day = String(s.createdAt||"").slice(0,10);
+    if(day) byDay[day] = (byDay[day]||0) + 1;
+    if((s.version||1) > 1) revisedCount++;
+    if(s.reviewedAt && s.createdAt){
+      const diff = (new Date(s.reviewedAt) - new Date(s.createdAt)) / 86400000;
+      if(diff >= 0) turnArounds.push(diff);
+    }
+  });
+  const decided = byStatus.approved + byStatus.revision;
+  const approvalRate = decided ? Math.round(byStatus.approved/decided*100) : null;
+  const days = Object.keys(byDay).sort();
+  const span = days.length ? Math.round((new Date(days[days.length-1]) - new Date(days[0]))/86400000) + 1 : 0;
+  const avgPerDay = span ? total/span : total;
+  const avgTurn = turnArounds.length ? turnArounds.reduce((a,b)=>a+b,0)/turnArounds.length : null;
+  const topDeptKey = Object.keys(byDept).sort((a,b)=>byDept[b]-byDept[a])[0];
+  return { total, byStatus, byDept, byDay, approvalRate, span, avgPerDay, revisedCount, avgTurn, topDeptKey, decided };
+}
+
+function buildNarrative(st){
+  const top = DEPT_SHORT[st.topDeptKey] || "—";
+  const rate = st.approvalRate!=null ? st.approvalRate+"٪" : "—";
+  const turn = st.avgTurn==null ? "—" : (st.avgTurn<1 ? "أقل من يوم" : (Math.round(st.avgTurn*10)/10)+" يوم");
+  return (
+    "<p><b>تقرير الجودة — لجنة أخلاقيات البحث العلمي.</b> " +
+    "يأتي هذا التقرير الآلي ضمن منظومة متابعة الجودة الإلكترونية بالكلية، تماشياً مع التحول الرقمي " +
+    "ومعايير الاعتماد المؤسسي، وانسجاماً مع محاور رؤية مصر 2030 في التعليم والبحث العلمي.</p>" +
+    "<p>تلقّت اللجنة حتى الآن <b>"+st.total+"</b> طلباً، بمعدل <b>"+st.avgPerDay.toFixed(1)+"</b> طلب يومياً تقريباً. " +
+    "بلغت نسبة الطلبات التي اعتُمدت مباشرة كملفات مستوفاة <b>"+rate+"</b> من إجمالي الطلبات التي تم البت فيها " +
+    "("+st.decided+" طلب)، بمتوسط زمن مراجعة قدره <b>"+esc(turn)+"</b>.</p>" +
+    "<p>يُعد قسم <b>"+esc(top)+"</b> الأكثر تقديماً للطلبات حتى الآن. كما رجع <b>"+st.revisedCount+"</b> " +
+    "من الطلبات بعد طلب تعديل وأُعيد تقديمها، وهو ما يعكس فاعلية آلية المتابعة والتعديل داخل الموقع.</p>"
+  );
+}
+
+/* ---------- أدوات رسم بسيطة (SVG بلا مكتبات خارجية) ---------- */
+function niceMax(v){
+  if(v<=0) return 4;
+  const mag = Math.pow(10, Math.floor(Math.log10(v)));
+  const steps=[1,2,2.5,5,10];
+  for(let i=0;i<steps.length;i++){ if(v<=steps[i]*mag) return steps[i]*mag; }
+  return Math.ceil(v/mag)*mag;
+}
+
+/* رسم أعمدة (بار تشارت عادي لو سلسلة واحدة، أو مجمّع لو أكثر من سلسلة) */
+function svgGroupedBars(groups, seriesKeys, seriesColors, opts){
+  opts = opts || {};
+  const W = opts.w || 640, H = opts.h || 260;
+  const padL=38, padR=14, padT=18, padB=38;
+  const plotW = W-padL-padR, plotH = H-padT-padB;
+  let maxV = 0;
+  groups.forEach(g=> seriesKeys.forEach(k=>{ maxV = Math.max(maxV, g[k]||0); }));
+  const yMax = niceMax(maxV || 1);
+  const n = Math.max(groups.length, 1);
+  const groupW = plotW / n;
+  const barGap = 10;
+  const seriesN = seriesKeys.length;
+  const barW = Math.max(5, (groupW - barGap*2 - (seriesN-1)*3) / seriesN);
+  const yTicks = 4;
+  let svg = '<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="رسم بياني">';
+  for(let i=0;i<=yTicks;i++){
+    const v = yMax*i/yTicks;
+    const y = padT + plotH - (v/yMax)*plotH;
+    svg += '<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="#E3F0E8" stroke-width="1"/>';
+    svg += '<text x="'+(padL-7)+'" y="'+(y+3.5).toFixed(1)+'" font-size="10" text-anchor="end">'+Math.round(v)+'</text>';
+  }
+  groups.forEach((g,gi)=>{
+    const gx = padL + gi*groupW;
+    seriesKeys.forEach((k,si)=>{
+      const v = g[k]||0;
+      const bh = (v/yMax)*plotH;
+      const bx = gx + barGap + si*(barW+3);
+      const by = padT+plotH-bh;
+      svg += '<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+bh.toFixed(1)+
+             '" rx="3" fill="'+seriesColors[si]+'"/>';
+      if(v>0) svg += '<text x="'+(bx+barW/2).toFixed(1)+'" y="'+(by-4).toFixed(1)+
+             '" font-size="10" font-weight="700" text-anchor="middle" fill="'+seriesColors[si]+'">'+v+'</text>';
+    });
+    const cx = gx + groupW/2;
+    const lbl = String(g.label||"");
+    svg += '<text x="'+cx.toFixed(1)+'" y="'+(padT+plotH+18)+'" font-size="11" text-anchor="middle">'+esc(lbl)+'</text>';
+  });
+  svg += '<line x1="'+padL+'" y1="'+(padT+plotH)+'" x2="'+(W-padR)+'" y2="'+(padT+plotH)+'" stroke="#CFE7DA" stroke-width="1.5"/>';
+  svg += '</svg>';
+  return svg;
+}
+
+/* هيستوجرام زمني — أعمدة متلاصقة بلا فراغات، فرق بصري واضح عن البار تشارت */
+function svgHistogram(byDay, opts){
+  opts = opts || {};
+  const W = opts.w || 640, H = opts.h || 220;
+  const padL=38, padR=14, padT=18, padB=34;
+  const plotW = W-padL-padR, plotH = H-padT-padB;
+  const days = Object.keys(byDay).sort();
+  const n = Math.max(days.length, 1);
+  const vals = days.map(d=>byDay[d]);
+  const yMax = niceMax((vals.length?Math.max.apply(null,vals):1) || 1);
+  const binW = plotW/n;
+  const yTicks = 4;
+  let svg = '<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="هيستوجرام">';
+  for(let i=0;i<=yTicks;i++){
+    const v = yMax*i/yTicks;
+    const y = padT + plotH - (v/yMax)*plotH;
+    svg += '<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="#E3F0E8" stroke-width="1"/>';
+    svg += '<text x="'+(padL-7)+'" y="'+(y+3.5).toFixed(1)+'" font-size="10" text-anchor="end">'+Math.round(v)+'</text>';
+  }
+  days.forEach((d,i)=>{
+    const v = byDay[d];
+    const bh = (v/yMax)*plotH;
+    const bx = padL + i*binW;
+    const by = padT+plotH-bh;
+    svg += '<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+Math.max(1,binW-1).toFixed(1)+
+           '" height="'+bh.toFixed(1)+'" fill="#A37E2C"/>';
+    if(v>0) svg += '<text x="'+(bx+binW/2).toFixed(1)+'" y="'+(by-4).toFixed(1)+
+           '" font-size="10" font-weight="700" text-anchor="middle" fill="#A37E2C">'+v+'</text>';
+    const dt = new Date(d+"T00:00:00");
+    const lbl = isNaN(dt) ? d : (dt.getDate()+"/"+(dt.getMonth()+1));
+    svg += '<text x="'+(bx+binW/2).toFixed(1)+'" y="'+(padT+plotH+16)+'" font-size="9.5" text-anchor="middle">'+lbl+'</text>';
+  });
+  svg += '<line x1="'+padL+'" y1="'+(padT+plotH)+'" x2="'+(W-padR)+'" y2="'+(padT+plotH)+'" stroke="#CFE7DA" stroke-width="1.5"/>';
+  svg += '</svg>';
+  return svg;
+}
+
+function viewStats(){
+  const w=el("div");
+  const bar=el("div","admin-bar");
+  bar.innerHTML='<b>📊 إحصائيات الجودة</b><span class="spacer"></span>';
+  const back=el("button",null,"→ رجوع للوحة"); back.type="button"; back.addEventListener("click",()=>go("admin"));
+  bar.appendChild(back);
+  w.appendChild(bar);
+
+  const st = computeStats(SUBS);
+  if(!st.total){
+    const p=el("div","panel"); p.style.padding="16px";
+    p.appendChild(el("div","empty",'<div class="e-ico">📊</div><div>لا توجد طلبات كافية بعد لعرض إحصائيات الجودة.</div>'));
+    w.appendChild(p); return w;
+  }
+
+  const cards=el("div","stat-cards");
+  const mk=(v,l,cls)=> el("div","stat-card"+(cls?(" "+cls):""), '<div class="sv">'+v+'</div><div class="sl">'+esc(l)+'</div>');
+  cards.appendChild(mk(st.total, "إجمالي الطلبات المقدَّمة"));
+  cards.appendChild(mk(st.byStatus.approved||0, "ملفات مستوفاة", "ok"));
+  cards.appendChild(mk(st.byStatus.revision||0, "طلبات تعديل", "rev"));
+  cards.appendChild(mk(st.byStatus.pending||0, "قيد المراجعة"));
+  cards.appendChild(mk(st.approvalRate!=null ? st.approvalRate+"٪" : "—", "نسبة الاعتماد المباشر"));
+  cards.appendChild(mk(st.avgPerDay.toFixed(1), "متوسط الطلبات / يوم"));
+  w.appendChild(cards);
+
+  const nar=el("div","narrative"); nar.innerHTML = buildNarrative(st);
+  w.appendChild(nar);
+
+  const p1=el("div","chart-panel");
+  p1.innerHTML = '<h3>عدد الطلبات حسب القسم العلمي</h3><p class="ch-sub">بار تشارت — إجمالي الطلبات في كل قسم</p>';
+  const deptGroups = Object.keys(DEPTS).map(k=>({ label:DEPT_SHORT[k], v: st.byDept[k]||0 }));
+  p1.innerHTML += svgGroupedBars(deptGroups, ["v"], ["#2E9B6E"], {h:260});
+  w.appendChild(p1);
+
+  const p2=el("div","chart-panel");
+  p2.innerHTML = '<h3>توزيع الطلبات عبر الأيام</h3><p class="ch-sub">هيستوجرام — عدد الطلبات المقدَّمة في كل يوم</p>';
+  p2.innerHTML += svgHistogram(st.byDay, {h:220});
+  if(Object.keys(st.byDay).length < 2){
+    p2.innerHTML += '<p class="ch-sub" style="margin-top:8px">* البيانات الحالية ليوم واحد فقط — يتّضح التوزيع أكثر مع تراكم الطلبات على مدار أيام متعددة.</p>';
+  }
+  w.appendChild(p2);
+
+  const p3=el("div","chart-panel");
+  p3.innerHTML = '<h3>حالة المراجعة داخل كل قسم</h3>'+
+    '<p class="ch-sub">ثلاثة أبعاد في رسم واحد: القسم (أفقي) × عدد الطلبات (رأسي) × حالة المراجعة (اللون)</p>';
+  const matrix = Object.keys(DEPTS).map(k=>{
+    const c = { pending:0, approved:0, revision:0 };
+    SUBS.filter(s=>s.dept===k).forEach(s=>{ const st2=s.status||"pending"; c[st2]=(c[st2]||0)+1; });
+    return Object.assign({ label: DEPT_SHORT[k] }, c);
+  });
+  p3.innerHTML += svgGroupedBars(matrix, ["pending","approved","revision"], ["#17694A","#146B4C","#9A5A12"], {h:260});
+  p3.innerHTML += '<div class="chart-legend">'+
+    '<span><i style="background:#17694A"></i>قيد المراجعة</span>'+
+    '<span><i style="background:#146B4C"></i>مستوفاة</span>'+
+    '<span><i style="background:#9A5A12"></i>غير مستوفاة</span></div>';
+  w.appendChild(p3);
+
+  return w;
 }
 
 
